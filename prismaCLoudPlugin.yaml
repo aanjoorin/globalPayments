@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prisma-cloud-plugin-config
+  namespace: kube-system
+data:
+  app.yml: |
+    name: prisma-cloud-plugin
+    version: 1.0.0
+    description: Prisma Cloud Plugin for PV and PVC monitoring
+    type: k8s
+    enabled: true
+    parameters:
+      - name: apiToken
+        type: string
+        description: Prisma Cloud API token
+        required: true
+      - name: apiURL
+        type: string
+        description: Prisma Cloud API URL
+        required: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prisma-cloud-plugin-sa
+  namespace: kube-system
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: prisma-cloud-plugin-cr
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: prisma-cloud-plugin-crb
+subjects:
+  - kind: ServiceAccount
+    name: prisma-cloud-plugin-sa
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: prisma-cloud-plugin-cr
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: prisma-cloud-plugin
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: prisma-cloud-plugin
+  template:
+    metadata:
+      labels:
+        app: prisma-cloud-plugin
+    spec:
+      serviceAccountName: prisma-cloud-plugin-sa
+      containers:
+        - name: prisma-cloud-plugin
+          image: <prisma-cloud-plugin-image>
+          imagePullPolicy: Always
+          env:
+            - name: PC_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: prisma-cloud-plugin-secret
+                  key: apiToken
+            - name: PC_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: prisma-cloud-plugin-secret
+                  key: apiURL
+          volumeMounts:
+            - name: plugin-config
+              mountPath: /etc/config
+              readOnly: true
+      volumes:
+        - name: plugin-config
+          configMap:
+            name: prisma-cloud-plugin-config

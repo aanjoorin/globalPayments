@@ -1,0 +1,23 @@
+  agent any
+  environment {
+    GCR_LOCATION = "${params.IMAGE_LOCATION}"
+    IMAGE_NAME = "image-${env.GITHUB_REPOSITORY##*/}"
+  }
+  parameters {
+    string(name: 'IMAGE_LOCATION', defaultValue: 'gcr.io/my-project', description: 'The location to store the container image')
+  }
+  stages {
+    stage('Build and Publish') {
+      steps {
+        // Rename the repository name if necessary
+        sh 'git remote set-url origin https://github.example.com/${env.GITHUB_REPOSITORY}.git'
+        
+        // Build the container image
+        sh 'docker build -t ${GCR_LOCATION}/${IMAGE_NAME} .'
+        
+        // Publish the container image to GCR
+        sh 'docker push ${GCR_LOCATION}/${IMAGE_NAME}'
+      }
+    }
+  }
+}

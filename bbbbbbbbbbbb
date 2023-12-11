@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+
+    environment {
+        POM_PROJECT_VERSION = readMavenPom().getVersion()
+        VERSION = readMavenPom().getVersion()
+        PROJECT_REPO = getRepo().toLowerCase()
+        GIT_COMMIT_HASH = getGitCommitHash()
+        RELEASE_TAG = getGitTag('HEAD')
+        SKIP_TESTS = skipTests(getValue(globalJsonSettings, 'skipTests'))
+        NXIQ_STAGE = getNxiqStage(branch_name)
+        NODE_EXTRA_CA_CERTS = "/etc/ssl/certs/CA.pem"
+        NPMRC = credentials('npmrc')
+        IS_RELEASE_BRANCH = isReleaseBranch(branch_name)
+        IS_DEVELOP_BRANCH = isDevelopBranch(branch_name)
+        POM_FILE_PATH = getValue(globalJsonSettings, 'pomFilePath')
+        TL_USER = credentials('twistlock-username')
+        TL_PASS = credentials('twistlock-password')
+    }
+
+    stages {
+        stage('Check twistcli version') {
+            environment {
+                TCLI_VERSION = sh(script: "./twistcli | grep -A1 VERSION | sed 1d", returnStdout: true).trim()
+                CONSOLE_VERSION = sh(script: "curl -k -u \"$TL_USER:$TL_PASS\" https://$TL_CONSOLE/api/v1/version | tr -d \'\"'", returnStdout: true).trim()
+            }
+            steps {
+                script {
+                    echo "TCLI_VERSION = $TCLI_VERSION"
+                    echo "CONSOLE_VERSION = $CONSOLE_VERSION"
+
+                    if (TCLI_VERSION != CONSOLE_VERSION) {
+                        echo "Downloading twistcli"
+                        sh 'curl -k -u $TL_USER:$TL_PASS --output ./twistcli https://$TL_CONSOLE/api/v1/util/twistcli'
+                        sh 'sudo chmod a+x ./twistcli'
+                    }
+                }
+            }
+        }
+
+        stage('Scan with Twistcli') {
+            steps {
+                script {
+                    def imagesToScan = [
+                        "your-image-1:tag1",
+                        "your-image-2:tag2",
+                        // Add more images as needed
+                    ]
+
+                    container(name: 'docker') { // Assuming Twistcli is available in the docker container
+                        for (def image in imagesToScan) {
+                            sh './twistcli images scan --address https://$TL_CONSOLE -u $TL_USER -p $TL_PASS --details $image'
+                            // Add error handling in case the scan fails and decide what action to take.
+                            // For example, fail the build or continue with a warning.
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Git Push') {
+            // Your existing Git Push stage here...
+        }
+
+        // Continue with other stages...
+
+    }
+
+    post {
+        always {
+            // Your existing post section here...
+        }
+    }
+}

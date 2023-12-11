@@ -1,0 +1,32 @@
+  stages {
+    stage('Plan Migration') {
+      steps {
+        container(name: 'kaniko', shell: '/busybox/sh') {
+          script {
+            withCredentials([file(credentialsId: 'devops.json', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+              sh '''
+                images=$(cat images.txt)
+                touch toCopy.txt
+                gcr="us.gcr.io/devops/third-party"
+                gcrane ls ${gcr} || { echo "Unable to retrieve list of images" ; exit 1; }
+                for img in ${images}
+                do
+                  it=$(echo ${img#*/}) # Remove repo from path
+                  i=$(echo ${it%:*}) # Remove tag
+                  echo "Checking to make sure ${it} does not exist."
+                  if gcrane ls ${gcr}/${i} | grep -w "${gcr}/${it}"; then
+                    echo "Image ${it} exists. Skipping copy..."
+                    continue
+                  fi
+                  echo ${img} >> toCopy.txt
+                done
+                echo "The following images will be copied to GCR upon merge to master:"
+                cat toCopy.txt
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    I want the pipeline to detect when an image has been updated even when the tag has not been updated

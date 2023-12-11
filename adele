@@ -1,0 +1,85 @@
+#!/bin/bash
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    key="$1"
+
+    case $key in
+        -u|--bb_username)
+        BB_USERNAME="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -a|--bb_apitoken)
+        BB_APITOKEN="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -p|--bb_projectkey)
+        BB_PROJECTKEY="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -v|--ghe_username)
+        GHE_USERNAME="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -o|--ghe_org)
+        GHE_ORG="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -t|--ghe_apitoken)
+        GHE_APITOKEN="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        -r|--repos)
+        REPOS="$2"
+        shift # past argument
+        shift # past value
+        ;;
+        --remove-access)
+        REMOVE_ACCESS=1
+        shift # past argument
+        ;;
+        -*|--*)
+        echo "Unknown option $1"
+        exit 1
+        ;;
+        *)
+        POSITIONAL+=("$1") # save positional args
+        shift # past argument
+        ;;
+    esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+# GitHub Enterprise API URL
+GHE_API_URL="https://your-github-enterprise-instance/api/v3"
+
+# Check if all required parameters have been provided
+if [ -z "$BB_USERNAME" ] || [ -z "$BB_APITOKEN" ] || [ -z "$BB_PROJECTKEY" ] || \
+   [ -z "$GHE_USERNAME" ] || [ -z "$GHE_ORG" ] || [ -z "$GHE_APITOKEN" ] || \
+   [ -z "$REPOS" ]
+then
+    echo "Usage: del-repos.sh -u <bb_username> -a <bb_apitoken> -p <bb_projectkey> -v <ghe_username> -o <ghe_org> -t <ghe_apitoken> -r <repo1,repo2,repo3> [--remove-access]"
+    exit 1
+fi
+
+# Loop through each repository
+for REPO in $(echo $REPOS | sed "s/,/ /g")
+do
+   # Construct the API URL for deleting the repository
+   DELETE_URL="$GHE_API_URL/repos/$GHE_USERNAME/$REPO"
+
+   # Send a DELETE request with the API token
+   curl -X DELETE -H "Authorization: token $GHE_APITOKEN" "$DELETE_URL"
+
+   # Output a message for each deleted repository
+   echo "Deleted repository: $REPO"
+done
+
+# Output an end message
+echo "END DELETION"

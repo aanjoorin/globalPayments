@@ -1,0 +1,100 @@
+environment {
+  PROJECT_REPO = getRepo().toLowerCase()
+  GIT_COMMIT_HASH = sh (script: "git log -n 1 --pretty=format:'%H'", returnStdout: true)
+  VERSION = versionUtils.simpleVersionRead()
+  IS_RELEASE_BRANCH = isReleaseBranch(branch_name)
+  IS_DEVELOP_BRANCH = isDevelopBranch(branch_name)
+}
+
+stages {
+  stage('init') {
+    steps {
+      container('alpine') {
+        sh '''
+          if [ -x init ]
+          then
+            ./init
+          fi
+        '''
+      }
+    }
+  }
+  
+  stage('Image Build & Push') {
+    steps {
+      container(name: 'kaniko', shell: '/busybox/sh') {
+        script {
+          buildImages(globalJsonSettings)
+        }
+      }
+    }
+  }
+  
+  stage('Prisma Scan Build') {
+    steps {
+      container(name: 'prisma', image: 'prisma/prisma', shell: '/bin/sh') {
+        sh 'prisma scan build'
+      }
+    }
+  }
+}
+=============================
+
+pipeline {
+    agent any
+    
+    stages {
+        stage('Prisma Build and Scan') {
+            steps {
+                // Install Prisma CLI
+                sh 'npm install -g prisma'
+                // Prisma Build
+                sh 'prisma generate'
+                // Prisma Scan
+                // Replace <prisma_scan_command> with the appropriate command for Prisma scanning tool
+                sh '<prisma_scan_command>'
+                // Handle scan results
+                // Add appropriate actions based on the scan results
+            }
+        }
+        // Add other stages as needed
+        stage('Other Stage') {
+            steps {
+                // Steps for other stages
+            }
+        }
+    }
+}
+
+===============================================================
+pipeline {
+    agent any
+    
+    stages {
+        stage('Prisma Build and Scan') {
+            steps {
+                // Install Prisma CLI (Assuming npm is installed)
+                sh 'npm install -g prisma'
+                
+                // Prisma Build
+                sh 'prisma generate'
+                
+                // Prisma Scan (Replace with your specific scan command)
+                sh 'prisma scan'
+                
+                // Handle scan results (Example: Fail pipeline if scan fails)
+                script {
+                    def scanOutput = sh(script: 'prisma scan', returnStdout: true).trim()  // Read Prisma scan results or output
+                    // Check if there are any issues in the scan output
+                    if (scanOutput.contains('CRITICAL')) {
+                        error('Prisma scan detected critical issues. Pipeline will be terminated.')
+                    }
+                }
+            }
+        }
+        
+        // Add more stages for other parts of your pipeline (e.g., build, test, deploy)
+        // ...
+    }
+}
+1

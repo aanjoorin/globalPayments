@@ -1,0 +1,91 @@
+agent {
+    kubernetes {
+        defaultContainer 'jnlp'
+        yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  serviceAccountName: prufer
+  initContainers:
+  - name: local-cacerts
+    image: img.ops.net.com/net-ops/image/maven:${maven_base_image_tag}
+    imagePullPolicy: IfNotPresent
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+    command:
+    - sh
+    - -c
+    - cp -Rv /etc/ssl/certs/* /etc/ssl/certs2/.
+    volumeMounts:
+    - name: certs
+      mountPath: /etc/ssl/certs2
+  - name: install-gh-cli
+    image: ghcr.io/cli/cli:v2      # Use the official GitHub CLI image
+    imagePullPolicy: IfNotPresent
+    command:
+    - sh
+    - -c
+    - apk add --no-cache gh         # Install gh CLI using Alpine package manager (apk)
+    volumeMounts:
+    - name: certs
+      mountPath: /etc/ssl/certs
+  containers:
+  - name: jnlp
+    volumeMounts:
+    - name: certs
+      mountPath: /etc/ssl/certs
+    env:
+    - name: WHERE_AM_I
+      valueFrom:
+        configMapKeyRef:
+          name: environment
+          key: environment
+  - name: maven
+    image: img.ops.net.com/net-ops/image/maven:${maven_base_image_tag}
+    imagePullPolicy: IfNotPresent
+    command:
+    - cat
+    tty: true
+    env:
+    - name: WHERE_AM_I
+      valueFrom:
+        configMapKeyRef:
+          name: environment
+          key: environment
+    volumeMounts:
+    - name: globalsettings
+      mountPath: "/secrets/maven/globalsettings"
+    - name: settings
+      mountPath: "/settings/maven/settings"
+  - name: kaniko
+    image: img.ops.net.com/net-ops/image/kaniko:1.2
+    imagePullPolicy: IfNotPresent
+    command:
+    - /busybox/cat
+    tty: true
+  ${fortify_container}
+  volumes:
+  - name: certs
+    emptyDir: {}
+  - name: globalsettings
+    secret:
+      secretName: globalsettings.xml
+      items:
+      - key: globalsettings.xml
+        path: globalsettings.xml
+  - name: settings
+    configMap:
+      name: settings.xml
+      items:
+      - key: settings.xml
+        path: settings.xml
+  - name: secretcaca
+    secret:
+      secretName: secretca
+      items:
+      - key: userroot.crt
+        path: root.crt
+      """
+    }
+}

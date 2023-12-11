@@ -1,0 +1,17 @@
+pipeline {
+  parameters {
+    json(name: 'globalJsonSettings', defaultValue: '{}', description: 'Global settings in JSON format')
+  }
+
+  stages {
+    stage('Build and push image') {
+      steps {
+        script {
+          def globalSettings = readJSON(text: "${params.globalJsonSettings}")
+          // Use the globalSettings variable to pass the JSON values to the script
+          buildImage(globalSettings)
+        }
+      }
+    }
+  }
+}

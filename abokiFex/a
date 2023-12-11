@@ -1,0 +1,25 @@
+    stage('Image Build & Push ') {
+      steps {
+        container(name: 'kaniko', shell: '/busybox/sh') {
+          script {
+            // function to build & push
+            buildImages(globalJsonSettings)
+            def imageLocation = env.IMAGE_LOCATION ?: "gcr.io/my-project"
+            def imageFullName = "${imageLocation}/${env.IMAGE_NAME}"
+            sh "echo ${GCLOUD_SERVICE_KEY} > /kaniko/.docker/config.json"
+            sh "echo ${GCLOUD_SERVICE_KEY} > /kaniko/.docker/key.json"
+            sh "cat /kaniko/.docker/key.json | docker login -u _json_key --password-stdin https://${imageLocation}"
+            sh "docker build -t ${imageFullName} ."
+            withCrendentials([file(crendentialsId: 'net-sand.json', variable: 'GOOGLE_APPLICATION_CRENDENTIALS')]) {
+              sh '''
+                gcrane push /image.tar us.gcr.io/net-sand/${IMAGE_NAME}:${IMAGE_TAG}
+                gcrane tag us.gcr.io/net-sand/${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_TAG}-${GIT_COMMIT_HASH}
+              '''  
+             }
+            sh "docker push ${imageFullName}"
+            // buildImages(globalJsonSettings)
+          }
+        }
+      }
+    }
+  }

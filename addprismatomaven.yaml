@@ -1,0 +1,28 @@
+stage('nxiq quick scan') {
+  steps {
+    container('maven') {
+      script {
+        sh '''
+          export JDK_JAVA_OPTIONS="$JDK_JAVA_OPTIONS --add-opens=java.base/java.util=ALL-UNNAMED"
+          applicationId=$(echo ${JOB_NAME} | awk -F "/" '{ print $1"."$2 }' )
+          mvn -f ${POM_FILE_PATH} --global-settings /secrets/maven/globalsettings/globalsettings.xml \
+              --settings /settings/maven/settings/settings.xml \
+              package \
+              --batch-mode com.sonatype.clm:clm-maven-plugin:2.30.7-01:evaluate \
+              -DskipTests \
+              -Dclm.stage=build \
+              -Dclm.applicationId=${applicationId} \
+              -Dclm.serverUrl=https://nxiq.greyops.touchnet.com \
+              -Dclm.serverId=nxiq.greyops.touchnet.com
+          '''
+
+        // Add the Prisma Cloud build step here
+        sh '''
+          # Add the command to run Prisma Cloud scanning
+          # Replace <scan-command> with the actual command to run the Prisma Cloud scanning tool
+          <scan-command>
+        '''
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+pipeline {
+  options {
+    disableConcurrentBuilds(abortPrevious: abortPrevious(branch_name) )
+  }
+  agent {
+    kubernetes {
+      defaultContainer 'jnlp'
+      yaml "${yaml_spec}"
+    }
+  }
+  environment {
+    IMAGE_NAME = getRepo().toLowerCase()
+    GIT_COMMIT_HASH = getGitCommitHash()
+    RELEASE_TAG = getGitTag('HEAD')
+    SKIP_TESTS = skipTests(getValue(globalJsonSettings, 'skipTests'))
+    NXIQ_STAGE = getNxiqStage(branch_name)
+    NODE_EXTRA_CA_CERTS = "/etc/ssl/certs/CA.pem"
+    NPMRC = credentials('npmrc')
+    PACKAGE_JSON_VERSION = versionUtils.npmVersionRead()
+  }
+  stages {
+    stage('Manage Version') {
+      when {
+        allOf {
+          not { expression { return branch_name == 'master' } }
+          not { expression { return branch_name =~ /^support/ } }
+          not { expression { return branch_name =~ /^release/ } }
+        }
+      }
+      steps {
+        container('node') {
+          script {
+            sh '''
+               PREFIX=$(dirname ${GIT_BRANCH})
+               BASENAME=$(basename ${GIT_BRANCH})
+               BRANCH=$(echo ${BASENAME} | sed 's/[^-a-zA-Z_0-9]/-/g' | sed 's/--/-/g' | sed 's/-$//')
+               echo $BRANCH
+               VERSION=${PACKAGE_JSON_VERSION}-beta.$BRANCH.$BUILD_NUMBER
+               echo $VERSION
+               # Update Version Here
+               npm --no-git-tag-version version $VERSION
+               '''
+          }
+        }
+      }
+    }
+    stage('Npm Build') {
+      steps {
+        container('node') {
+          script {
+            withCredentials([usernameColonPassword(credentialsId: 'npmrc', variable: 'NPMRC')]) {
+              sh '''
+                echo "$NPMRC" > ~/.npmrc
+                npm ci
+                npm run lint
+                npm run build
+                npm run test
+                # TODO: Report test results to Jenkins
+                # TODO: Collect test coverage via npm run test:coverage and report
+              '''
+            }
+          }
+        }
+      }
+    }
+    stage('Npm Build & Push Image') {
+      when {
+        expression { getValue(globalJsonSettings, 'buildImage').toBoolean() }
+      }
+      steps {
+        container(name: 'kaniko', shell: '/busybox/sh') {
+          script {
+            env.VERSION = versionUtils.npmVersionRead()
+            buildImages(globalJsonSettings)
+          }
+        }
+      }
+    }
+  }
+}

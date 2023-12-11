@@ -1,0 +1,65 @@
+def call(globalJsonSettings) {
+  def branch_name = getBranchName()
+  
+  environment {
+    PROJECT_REPO = getRepo().toLowerCase()
+    GIT_COMMIT_HASH = sh (script: "git log -n 1 --pretty=format:'%H'", returnStdout: true)
+    VERSION = versionUtils.simpleVersionRead()
+    IS_RELEASE_BRANCH = isReleaseBranch(branch_name)
+    IS_DEVELOP_BRANCH = isDevelopBranch(branch_name)
+    IMAGE_LOCATION = params.IMAGE_LOCATION ?: "gcr.io/my-project"
+    IMAGE_NAME = params.IMAGE_NAME ?: "${PROJECT_REPO}:${VERSION}-${GIT_COMMIT_HASH}"
+  }
+  
+  stages {
+    stage('init') {
+      steps {
+        container('alpine') {
+          sh '''
+            if [ -x init ]
+            then
+              ./init
+            fi
+          '''
+        }
+      }
+    }
+    stage('Image Build & Push') {
+      steps {
+        container(name: 'kaniko', shell: '/busybox/sh') {
+          script {
+            def imageFullName = "${IMAGE_LOCATION}/${IMAGE_NAME}"
+            sh "echo ${GCLOUD_SERVICE_KEY} > /kaniko/.docker/config.json"
+            sh "echo ${GCLOUD_SERVICE_KEY} > /kaniko/.docker/key.json"
+            sh "cat /kaniko/.docker/key.json | docker login -u _json_key --password-stdin https://${IMAGE_LOCATION}"
+            sh "docker build -t ${imageFullName} ."
+            sh "docker push ${imageFullName} --label=lifecycle=${params.IMAGE_LIFECYCLE}"
+          }
+        }
+      }
+    }
+  }
+  
+  post {
+    always {
+      script {
+        def emailTo = getValue(globalJsonSettings, 'emailTo')
+        def subject = " ${currentBuild.result} -=-=- ${env.JOB_NAME} [${env.BUILD_NUMBER}] "
+        def details = " ${env.BUILD_URL} ${env.JOB_NAME} [${env.BUILD_NUMBER}] "
+        emailext (
+          to: emailTo,
+          recipientProviders: [[$class: 'RecipientPro'],
+                               [$class: 'RecipientPro']],
+          subject: subject,
+          body: details,
+          attachLog: true
+        )
+      }
+    }
+    success {
+      script {
+        scheduleBuild(env.BRANCH_NAME, getValue(globalJsonSettings, 'scheduleFromDevelop'), getValue(globalJsonSettings, 'scheduleFromMaster') )
+      }
+    }
+  }
+}

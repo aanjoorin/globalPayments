@@ -1,0 +1,47 @@
+pipeline {
+    agent any
+
+    environment {
+        REPO_LOCAL = getRepo()
+        REPO_REMOTE = getValue(globalJsonSettings, 'remoteRepository')
+    }
+
+    stages {
+        stage('Init') {
+            steps {
+                script {
+                    if (env.REPO_LOCAL == '') {
+                        abortBuild('Local Repository not configured. -- Aborting.')
+                    }
+                    if (env.REPO_REMOTE == 'null') {
+                        abortBuild('Remote Repository not configured. -- Aborting.')
+                    }
+                    if (env.CHANGE_BRANCH != null) {
+                        println('Change/Pull Request Detected.\nUsing Branch: ' + env.CHANGE_BRANCH)
+                        env.BRANCH = env.CHANGE_BRANCH
+                    } else {
+                        println('Using Branch: ' + env.BRANCH_NAME)
+                        env.BRANCH = env.BRANCH_NAME
+                    }
+                }
+            }
+        }
+
+        stage('Clone Repository') {
+            steps {
+                script {
+                    // Clone the GitHub repository
+                    def repoUrl = 'https://www.github.com/sand/move.git'
+                    def repoDir = "${env.REPO_LOCAL}/${env.BRANCH}"
+                    sh "mkdir -p ${repoDir}"
+                    dir("${repoDir}") {
+                        sh "git clone ${repoUrl} ."
+                    }
+                }
+            }
+        }
+
+        // Add more stages as needed
+    }
+}
+
